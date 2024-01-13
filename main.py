@@ -1,185 +1,277 @@
 import pygame
 import sys
 import os
+from random import randint
 
 pygame.init()
-width, height = 1280, 720
-level_number = 'I'
 
+class Tile(pygame.sprite.Sprite):
+    def __init__(self, x, y, image):
+        super(Tile, self).__init__()
+        self.image = image
+        self.rect = self.image.get_rect()
+        self.rect.topleft = (x, y)
 
 class Person(pygame.sprite.Sprite):
-    global level_number
-
-    def __init__(self, x, y, level_number):
+    def __init__(self, x, y, max_health=100):
         super(Person, self).__init__()
-        self.player_x = x
-        self.player_y = y
         self.speed = 5
-        self.level_number = level_number
         original_image = pygame.image.load(os.path.join('data', 'person.png'))
-        self.image = pygame.transform.scale(original_image, (18, 44.44))
+        self.image = pygame.transform.scale(original_image, (PLAYER_WIDTH, PLAYER_HEIGHT))
         self.rect = self.image.get_rect()
-        self.rect.center = (self.player_x, self.player_y)
+        self.rect.topleft = (x, y)
+        self.max_health = max_health
+        self.health = self.max_health
 
-    def update(self):
+    def update(self, tiles_group, target_down_list):
         keys = pygame.key.get_pressed()
-        if keys[pygame.K_a] or keys[pygame.K_LEFT]:
-            if self.player_x > 20:  # Проверка, чтобы игрок не вышел за левую стену
-                self.player_x -= self.speed
-        if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
-            if level_number == 'I':
-                if self.player_x == 1260 and 410 < self.player_y < 420:
-                    self.player_x = 10
-                    self.level_number = 'II'
-                    level_text.update(self.level_number)
-                else:
-                    if self.player_x < width - 20:  # Проверка, чтобы игрок не вышел за правую стену с условием уровня под номером I
-                        self.player_x += self.speed
-            else:
-                if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
-                    if self.player_x < width - 20:  # Проверка, чтобы игрок не вышел за правую стену
-                        self.player_x += self.speed
-        if keys[pygame.K_w] or keys[pygame.K_UP]:
-            if self.player_y > 33:  # Проверка, чтобы игрок не вышел за верхнюю стену
-                self.player_y -= self.speed
-        if keys[pygame.K_s] or keys[pygame.K_DOWN]:
-            if self.player_y < height - 33:  # Проверка, чтобы игрок не вышел за нижнюю стену
-                self.player_y += self.speed
-        if keys[pygame.K_q]:
-            print(self.player_x, self.player_y)
-            print(self.level_number)
-        self.rect.center = (self.player_x, self.player_y)
+        dx, dy = 0, 0
 
+        if keys[pygame.K_a]:
+            dx = -self.speed
+        
+        if keys[pygame.K_d]:
+            dx = self.speed
+        
+        if keys[pygame.K_w]:
+            dy = -self.speed
+        
+        if keys[pygame.K_s]:
+            dy = self.speed
 
-class LevelText(pygame.sprite.Sprite):
-    def __init__(self, font, level_number):
-        super().__init__()
-        self.font = font
-        self.level_number = level_number
-        self.color = (199, 24, 149)
-        self.rendered_text = self.font.render(f"Уровень {self.level_number}",
-                                              True, self.color)
-        self.rect = self.rendered_text.get_rect(center=(1280 // 2, 30))
+        self.rect.x += dx
+        self.handle_collisions(dx, 0, tiles_group, target_down_list)
 
-    def update(self, level_number):
-        self.level_number = level_number
-        self.rendered_text = self.font.render(f"Уровень {self.level_number}",
-                                              True, self.color)
-        self.rect = self.rendered_text.get_rect(center=(1280 // 2, 30))
+        self.rect.y += dy
+        self.handle_collisions(0, dy, tiles_group, target_down_list)
 
-    def draw(self, screen):
-        screen.blit(self.rendered_text, self.rect.topleft)
+    def handle_collisions(self, dx, dy, tiles_group, target_down_list):
+        collisions = pygame.sprite.spritecollide(self, tiles_group, False)
 
+        for collision in collisions:
+            if dx > 0:
+                self.rect.right = collision.rect.left
+            elif dx < 0:
+                self.rect.left = collision.rect.right
 
-class NPC(pygame.sprite.Sprite):
+            if dy > 0:
+                self.rect.bottom = collision.rect.top
+            elif dy < 0:
+                self.rect.top = collision.rect.bottom
+
+        for target in target_down_list:
+            if pygame.sprite.collide_rect(self, target):
+                self.health -= 10  # Уменьшение здоровья при коллизии с падающим квадратом
+
+                if self.health <= 0:
+                    # Перезапуск игры
+                    reset_game()
+
+# Добавьте функцию перезапуска игры
+def reset_game():
+    global person, target_down_list
+    person = Person(0, 0)
+    target_down_list = []
+
+class Boss(pygame.sprite.Sprite):
     def __init__(self, x, y):
-        super(NPC, self).__init__()
-        self.npc_x = x
-        self.npc_y = y
-        original_image = pygame.image.load(os.path.join('data', 'npc.png'))
-        self.image = pygame.transform.scale(original_image, (18, 44.44))
+        super(Boss, self).__init__()
+        original_image = pygame.image.load(os.path.join('data', 'boss.png'))
+        self.image = pygame.transform.scale(original_image, (BOSS_WIDTH, BOSS_HEIGHT))
         self.rect = self.image.get_rect()
-        self.rect.center = (self.npc_x, self.npc_y)
+        self.rect.topleft = (x, y)
+        self.health = 100
 
-        self.dialogue_text = "YEYO!, я NPC! Нажми пробел, чтобы поговорить со мной."
-        self.font = pygame.font.Font(None, 18)
-        self.text_surface = self.font.render(self.dialogue_text, True,
-                                             (199, 24, 149))
-        self.text_rect = self.text_surface.get_rect()
-        self.text_rect.midtop = (self.npc_x, self.npc_y - 30)
+class TargetDown(pygame.sprite.Sprite):
+    def __init__(self):
+        super(TargetDown, self).__init__()
+        self.px, self.py = randint(0, width - TARGET_WIDTH), -100
+        self.speed = randint(3, 15)
+        self.rect = pygame.Rect(self.px, self.py, TARGET_WIDTH, TARGET_HEIGHT)
+        target_down_list.append(self)
+    
+    def update(self):
+        self.py += self.speed
+        self.rect.y = self.py
 
-        self.show_dialogue = False  # Переменная для отображения диалога
+        if self.rect.top > height:
+            target_down_list.remove(self)
 
-    def update(self, player_rect):
-        # Проверка расстояния между игроком и NPC
-        distance = pygame.math.Vector2(self.rect.center).distance_to(
-            player_rect.center)
+    def draw(self):
+        pygame.draw.rect(screen, pygame.Color('green'), self.rect) 
 
-        # Отображение диалога, если игрок достаточно близко (например, расстояние менее 50 пикселей)
-        self.show_dialogue = distance < 50
-
-        # Обновление положения rect
-        self.rect.topleft = (self.npc_x, self.npc_y)
-
-    def draw_dialogue(self, screen):
-        if self.show_dialogue:
-            pygame.draw.rect(screen, (0, 0, 0),
-                             (self.npc_x - 150, self.npc_y - 50, 0, 100))
-            screen.blit(self.text_surface, self.text_rect.topleft)
-
+    def is_clicked(self, mouse_pos):
+        return self.rect.collidepoint(mouse_pos)         
 
 def draw_cursor(screen):
-    original_image = pygame.image.load(os.path.join('data', 'cursor.png'))
-    image = pygame.transform.scale(original_image, (40, 40))
+    cursor_image = pygame.transform.scale(pygame.image.load(os.path.join('data', 'cursor.png')), (CURSOR_SIZE, CURSOR_SIZE))
     mouse_x, mouse_y = pygame.mouse.get_pos()
-    screen.blit(image, (mouse_x, mouse_y))
+    screen.blit(cursor_image, (mouse_x, mouse_y))
 
-
-def walls(level_number):
-    if level_number == 'I':
-        pygame.draw.rect(screen, (199, 24, 149), (0, 0, width, 10))
-        pygame.draw.rect(screen, (199, 24, 149), (0, height - 10, width, 10))
-        pygame.draw.rect(screen, (199, 24, 149), (0, 0, 10, height))
-        pygame.draw.rect(screen, (199, 24, 149), (width - 10, 0, 10, height))
-    elif level_number == 'II':
-        pygame.draw.rect(screen, (255, 255, 255), (0, 0, width, 10))
-        pygame.draw.rect(screen, (255, 255, 255), (0, height - 10, width, 10))
-        pygame.draw.rect(screen, (255, 255, 255), (0, 0, 10, height))
-        pygame.draw.rect(screen, (255, 255, 255), (width - 10, 0, 10, height))
-
-
-if __name__ == '__main__':
-    width, height = 1280, 720
-    screen = pygame.display.set_mode((width, height))
-    pygame.display.set_caption('SYSTEM 3RASE')
-    clock = pygame.time.Clock()
-
-    font = pygame.font.Font(None, 36)  # Шрифт и размер текста
-    text_color = (199, 24, 149)  # Цвет текста
-
-    level_text = LevelText(font, level_number)
-
+def create_level():
     all_sprites = pygame.sprite.Group()
     person_group = pygame.sprite.Group()
-    npc_group = pygame.sprite.Group()
-    level_walls_group = pygame.sprite.Group()
 
-    person = Person(1250, 415, level_number)
-    person_group.add(person)
-    all_sprites.add(person)
+    level = [
+        "                                           ",
+        "                                           ",
+        "                                           ",
+        "                                           ",
+        "                                           ",
+        "                                           ",
+        "                                           ",
+        "                                           ",
+        "                                           ",
+        "                                           ",
+        "                       B                   ",
+        "                                           ",
+        "                                           ",
+        "                                           ",
+        "                                           ",
+        "                                           ",
+        "                                           ",
+        "                                           ",
+        "                                           ",
+        "                 WWWWWWWWWWWWWWWWWWWW      ",
+        "                 W                  W      ",
+        "                 W                  W      ",
+        "                 W                  W      ",
+        "                 W                  W      ",
+        "                 W                  W      ",
+        "                 W        P         W      ",
+        "                 W                  W      ",
+        "                 W                  W      ",
+        "                 W                  W      ",
+        "                 W                  W      ",
+        "                 W                  W      ",
+        "                 WWWWWWWWWWWWWWWWWWWW      ",
+        "                                           ",
+        "                                           ",
+        "                                           ",
+        "                                           ",
+    ]
 
-    npc = NPC(200, 200)
-    npc_group.add(npc)
-    all_sprites.add(npc)
+    tiles_group = pygame.sprite.Group()
+    tile_size = 22
+
+    for row_index, row in enumerate(level):
+        for col_index, tile in enumerate(row):
+            x = col_index * tile_size
+            y = row_index * tile_size
+
+            if tile == "W":
+                wall_image = pygame.transform.scale(pygame.image.load(os.path.join('data', 'wall.png')), (tile_size, tile_size))
+                wall_tile = Tile(x, y, wall_image)
+                tiles_group.add(wall_tile)
+                all_sprites.add(wall_tile)
+
+            elif tile == "P":
+                person = Person(x, y)
+                person_group.add(person)
+                all_sprites.add(person)
+
+            elif tile == "B":
+                boss = Boss(x, y)
+                all_sprites.add(boss)
+                tiles_group.add(boss)
+
+    return tiles_group, all_sprites, person_group
+
+def draw_health_bar(screen, boss):
+    # Определите размер и положение полоски здоровья
+    bar_width = 200
+    bar_height = 20
+    bar_x = (width - bar_width) // 2
+    bar_y = height - 50
+
+    # Определите цвета для полоски здоровья
+    bar_color = (0, 255, 0)  # Зеленый
+    outline_color = (255, 255, 255)  # Белый
+
+    # Вычислите ширину здоровья относительно максимального значения (здесь 100)
+    health_width = (boss.health / 100) * bar_width
+
+    # Отрисуйте рамку и заполненную часть полоски здоровья
+    pygame.draw.rect(screen, outline_color, (bar_x, bar_y, bar_width, bar_height), 2)
+    pygame.draw.rect(screen, bar_color, (bar_x, bar_y, health_width, bar_height))
+
+def decrease_boss_health(boss, amount):
+    boss.health -= amount
+    if boss.health < 0:
+        boss.health = 0
+
+# Константы
+width, height = 1200, 800
+PLAYER_WIDTH, PLAYER_HEIGHT = 18, 44
+BOSS_WIDTH, BOSS_HEIGHT = 160, 90
+TARGET_WIDTH, TARGET_HEIGHT = 30, 30
+CURSOR_SIZE = 40
+
+screen = pygame.display.set_mode((width, height))
+pygame.display.set_caption('Error')
+clock = pygame.time.Clock()
+
+person = Person(0, 0)
+target_down_list = []
+
+boss = Boss(0, 0)
+
+pygame.mouse.set_visible(False)
+
+tiles_group, all_sprites, person_group = create_level()
+
+timer_down1 = 60
+timer_down2 = 30
+
+running = True
+
+while running:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:  # Левая кнопка мыши
+                mouse_pos = pygame.mouse.get_pos()
+                for target in target_down_list:
+                    if target.is_clicked(mouse_pos):
+                        person.health -= 20  # Уменьшение здоровья персонажа
+                        target_down_list.remove(target)
+
+    if person.health <= 0:
+        reset_game()
 
 
-    pygame.mouse.set_visible(False)
+    if timer_down1 > 0:
+        timer_down1 -= 1
+    else:
+        target_down1 = TargetDown()
+        timer_down1 = randint(10, 30)
 
-    running = True
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-            elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-                if npc.show_dialogue:
-                    print("NPC говорит:", npc.dialogue_text)
-            elif event.type == pygame.KEYDOWN:
-                if level_number:
-                    level_text.update(level_number)
+    if timer_down2 > 0:
+        timer_down2 -= 1
+    else:
+        target_down2 = TargetDown()
+        timer_down2 = randint(5, 15)
 
-        person_group.update()
-        npc.update(person.rect)
+    for target in target_down_list:
+        target.update()
 
-        screen.fill((0, 0, 0))
+    person_group.update(tiles_group, target_down_list)
+    boss.update()
 
-        level_text.draw(screen)
-        all_sprites.draw(screen)
-        npc.draw_dialogue(screen)
-        draw_cursor(screen)
-        walls(level_number)
+    screen.fill((0, 0, 0))
 
-        pygame.display.flip()
-        clock.tick(60)
+    for target in target_down_list:
+        target.draw()
 
-    pygame.quit()
-    sys.exit()
+    tiles_group.draw(screen)
+    all_sprites.draw(screen)
+    draw_health_bar(screen, boss) 
+
+    draw_cursor(screen)
+
+    pygame.display.flip()
+    clock.tick(60)
+
+pygame.quit()
+sys.exit()
