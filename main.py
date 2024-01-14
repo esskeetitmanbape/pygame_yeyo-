@@ -4,6 +4,24 @@ import os
 from random import randint
 
 pygame.init()
+pygame.mixer.init()
+
+# Константы
+width, height = 1200, 800
+PLAYER_WIDTH, PLAYER_HEIGHT = 18, 44
+BOSS_WIDTH, BOSS_HEIGHT = 160, 90
+TARGET_WIDTH, TARGET_HEIGHT = 30, 30
+CURSOR_SIZE = 40
+
+walk_sound = pygame.mixer.Sound(os.path.join('data', 'sound', 'walk.wav'))
+death_sound = pygame.mixer.Sound(os.path.join('data', 'sound', 'death.wav'))
+hit_hurt_sound = pygame.mixer.Sound(os.path.join('data', 'sound', 'hitHurt.wav'))
+win_sound = pygame.mixer.Sound(os.path.join('data', 'sound', 'win.wav'))
+
+# Глобальные переменные
+screen = pygame.display.set_mode((width, height))
+pygame.display.set_caption('Error')
+clock = pygame.time.Clock()
 
 class Tile(pygame.sprite.Sprite):
     def __init__(self, x, y, image):
@@ -13,6 +31,8 @@ class Tile(pygame.sprite.Sprite):
         self.rect.topleft = (x, y)
 
 class Person(pygame.sprite.Sprite):
+    last_play_time = 0
+
     def __init__(self, x, y, max_health=100):
         super(Person, self).__init__()
         self.speed = 5
@@ -24,6 +44,7 @@ class Person(pygame.sprite.Sprite):
         self.health = self.max_health
 
     def update(self, tiles_group, target_down_list):
+
         keys = pygame.key.get_pressed()
         dx, dy = 0, 0
 
@@ -44,6 +65,17 @@ class Person(pygame.sprite.Sprite):
 
         self.rect.y += dy
         self.handle_collisions(0, dy, tiles_group, target_down_list)
+
+        current_time = pygame.time.get_ticks()
+
+        if keys[pygame.K_a] or keys[pygame.K_d] or keys[pygame.K_w] or keys[pygame.K_s]:
+            current_time = pygame.time.get_ticks()
+            if current_time - Person.last_play_time > 200:  # 200 миллисекунд задержки
+                walk_sound.play()
+                Person.last_play_time = current_time
+        else:
+            walk_sound.stop()
+       
 
     def handle_collisions(self, dx, dy, tiles_group, target_down_list):
         collisions = pygame.sprite.spritecollide(self, tiles_group, False)
@@ -66,12 +98,6 @@ class Person(pygame.sprite.Sprite):
                 if self.health <= 0:
                     # Перезапуск игры
                     reset_game()
-
-# Добавьте функцию перезапуска игры
-def reset_game():
-    global person, target_down_list
-    person = Person(0, 0)
-    target_down_list = []
 
 class Boss(pygame.sprite.Sprite):
     def __init__(self, x, y):
@@ -199,17 +225,37 @@ def decrease_boss_health(boss, amount):
     boss.health -= amount
     if boss.health < 0:
         boss.health = 0
+        win_sound.play()
 
-# Константы
-width, height = 1200, 800
-PLAYER_WIDTH, PLAYER_HEIGHT = 18, 44
-BOSS_WIDTH, BOSS_HEIGHT = 160, 90
-TARGET_WIDTH, TARGET_HEIGHT = 30, 30
-CURSOR_SIZE = 40
+def start_menu():
+    screen.fill((0, 0, 0))  # Fill the screen with black
 
-screen = pygame.display.set_mode((width, height))
-pygame.display.set_caption('Error')
-clock = pygame.time.Clock()
+    # Display menu text
+    font = pygame.font.Font(None, 36)
+    text = font.render("Press SPACE to start", True, (0, 255, 0))
+    text_rect = text.get_rect(center=(width // 2, height // 2))
+    screen.blit(text, text_rect)
+
+    pygame.display.flip()
+
+def reset_game():
+    global person, target_down_list, game_active
+    person = Person(0, 0)
+    boss.health = 100
+    target_down_list = []
+    game_active = True
+    death_sound.play()
+
+def victory_menu():
+    screen.fill((0, 0, 0))  # Fill the screen with black
+
+    # Display victory text
+    font = pygame.font.Font(None, 36)
+    text = font.render("You defeated the boss! Press SPACE to play again", True, (0, 255, 0))
+    text_rect = text.get_rect(center=(width // 2, height // 2))
+    screen.blit(text, text_rect)
+
+    pygame.display.flip()
 
 person = Person(0, 0)
 target_down_list = []
@@ -224,51 +270,65 @@ timer_down1 = 60
 timer_down2 = 30
 
 running = True
+game_active = False
 
 while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
-        elif event.type == pygame.MOUSEBUTTONDOWN:
-            if event.button == 1:  # Левая кнопка мыши
+        elif event.type == pygame.MOUSEBUTTONDOWN and game_active:
+            if event.button == 1:  # Left mouse button
                 mouse_pos = pygame.mouse.get_pos()
                 for target in target_down_list:
                     if target.is_clicked(mouse_pos):
-                        person.health -= 20  # Уменьшение здоровья персонажа
+                        boss.health -= 20
                         target_down_list.remove(target)
+                        hit_hurt_sound.play()
+        elif event.type == pygame.KEYDOWN and not game_active:
+            if event.key == pygame.K_SPACE:
+                reset_game()
 
-    if person.health <= 0:
-        reset_game()
+    if game_active:
+        if person.health <= 0:
+            if boss.health > 0:
+                reset_game()
 
+        if boss.health <= 0:
+            game_active = False
+            win_sound.play()
+            #victory_menu()
 
-    if timer_down1 > 0:
-        timer_down1 -= 1
+        if timer_down1 > 0:
+            timer_down1 -= 1
+        else:
+            target_down1 = TargetDown()
+            timer_down1 = randint(10, 30)
+
+        if timer_down2 > 0:
+            timer_down2 -= 1
+        else:
+            target_down2 = TargetDown()
+            timer_down2 = randint(5, 15)
+
+        for target in target_down_list:
+            target.update()
+
+        person_group.update(tiles_group, target_down_list)
+        boss.update()
+
+        screen.fill((0, 0, 0))
+
+        for target in target_down_list:
+            target.draw()
+
+        tiles_group.draw(screen)
+        all_sprites.draw(screen)
+        draw_health_bar(screen, boss) 
+
+        draw_cursor(screen)
+
     else:
-        target_down1 = TargetDown()
-        timer_down1 = randint(10, 30)
-
-    if timer_down2 > 0:
-        timer_down2 -= 1
-    else:
-        target_down2 = TargetDown()
-        timer_down2 = randint(5, 15)
-
-    for target in target_down_list:
-        target.update()
-
-    person_group.update(tiles_group, target_down_list)
-    boss.update()
-
-    screen.fill((0, 0, 0))
-
-    for target in target_down_list:
-        target.draw()
-
-    tiles_group.draw(screen)
-    all_sprites.draw(screen)
-    draw_health_bar(screen, boss) 
-
-    draw_cursor(screen)
+        start_menu()
 
     pygame.display.flip()
     clock.tick(60)
