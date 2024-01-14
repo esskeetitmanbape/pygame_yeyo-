@@ -1,4 +1,4 @@
-# Project "Project Name"
+# Project "Error"
 
 This project is a simple 2D Python game using the Pygame library.
 
