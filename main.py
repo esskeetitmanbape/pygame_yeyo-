@@ -3,6 +3,7 @@ import pygame
 import sys
 import os
 from random import randint
+from levev_data_base import level
 
 # Инициализация Pygame
 pygame.init()
@@ -216,12 +217,12 @@ def draw_cursor(screen):
     screen.blit(cursor_image, (mouse_x, mouse_y))
 
 # Функция создания уровня
-def create_level():
+def create_level(level):
+    level_game = level
+
     all_sprites = pygame.sprite.Group()
 
     person_group = pygame.sprite.Group()
-
-    # Описание уровня в виде строки, где "W" - тайл препятствия, "P" - игрок, "B" - босс
 
     level = [
         "                                           ",
@@ -266,7 +267,7 @@ def create_level():
 
     tile_size = 22
 
-    for row_index, row in enumerate(level):
+    for row_index, row in enumerate(level_game):
 
         for col_index, tile in enumerate(row):
       
@@ -388,7 +389,7 @@ boss = Boss(0, 0)
 pygame.mouse.set_visible(False)
 
 # Создание уровня
-tiles_group, all_sprites, person_group = create_level()
+tiles_group, all_sprites, person_group = create_level(level)
 
 # Таймеры для появления целей
 timer_down1 = 60
